@@ -4,10 +4,9 @@ var cc = DataStudioApp.createCommunityConnector();
 
 // 1
 function getAuthType(){
-  console.log("getAuth");
+  //console.log("getAuth");
   var AuthTypes = cc.AuthType;
-  return cc
-    .newAuthTypeResponse()
+  return cc.newAuthTypeResponse()
     .setAuthType(AuthTypes.KEY)
     .setHelpUrl('https://smartreach.io/api_docs#rest-api-key')
     .build();
@@ -26,15 +25,16 @@ function isAuthValid() {
 }
 
 function validateKey(key){
-  console.log("validateKey");
-  console.log("null check: ", key == null);
-  if (key == null) return true;
+  //console.log("validateKey");
+  //console.log("null check: ", key == null);
+  if (key == null) return false;
   var options = {
     headers : {"X-API-KEY": key},
     'muteHttpExceptions': true //true
   };
+  var url = 'https://api.smartreach.io/api/v1';
   var res = UrlFetchApp.fetch(url, options);
-  console.log("response validateKey ",res.getResponseCode());
+  //console.log("response validateKey ",res.getResponseCode());
   return res.getResponseCode() == 200;
 }
 
@@ -45,10 +45,9 @@ function validateKey(key){
  * @return {object} An object with an errorCode.
  */
 function setCredentials(request) {
-  console.log("setCredentials");
+  //console.log("setCredentials");
   var key = request.key;
 
-  // Optional
   // Check if the provided key is valid through a call to your service.
   var validKey = validateKey(key);
   if (!validKey) {
@@ -63,7 +62,6 @@ function setCredentials(request) {
     .setIsValid(true)
     .build();
   }
-  
 }
 
 /**
@@ -77,13 +75,14 @@ function resetAuth() {
 //optional for debugging
 
 function isAdminUser(){
-  return false;
+  return true;
 }
 
 // 2
 function getConfig(){
   var config = cc.getConfig();
-  config
+  // test config not required because of correct Authroization key
+ /*  config
     .newInfo()
     .setId('instructions')
     .setText(
@@ -93,12 +92,10 @@ function getConfig(){
   config
     .newTextInput()
     .setId("apikey")
-    .setName("API KEY");
+    .setName("API KEY"); */
 
   //date not required as parameter
   //config.setDateRangeRequired(true); 
-  
-
   return config.build();
 }
 
@@ -107,7 +104,7 @@ function getFields(){
   var fields = cc.getFields();
   var types = cc.FieldType;
 
-  // first only Campaigns
+  // Field Schema for Campaign Data
   fields
     .newDimension()
     .setId("id")
@@ -171,14 +168,12 @@ function getSchema(request) {
 
 // 4
 function getData(request){
- /*  request.configParams = validateConfig(request.configParams); */
-  console.log("getData");
+  //console.log("getData");
   var requestedFields = getFields().forIds(
     request.fields.map(function(field) {
       return field.name;
     })
   );
-
   try {
     var apiResponse = fetchDataFromApi(request);
     var normalizedResponse = normalizeResponse(request, apiResponse);
@@ -198,37 +193,41 @@ function getData(request){
   };
 }
 
+
 /**
  * @param {Object} request Data request parameters.
  * @returns {string} Response text for UrlFetchApp.
  */
 function fetchDataFromApi(request) {
-  console.log("fetchDataFromApi");
+  //console.log("fetchDataFromApi");
   var url = 'https://api.smartreach.io/api/v1/campaigns';
   
   // add apikey to header
-  var apikey = request.configParams.apikey;
+  var userProperties = PropertiesService.getUserProperties();
+  var key = userProperties.getProperty('sr.key');
+
+  var apikey =  key;
+  //request.configParams.apikey;
   var options = {
     headers : {"X-API-KEY": apikey}
   };
   var response = UrlFetchApp.fetch(url, options);
-  console.log("response", response.getResponseCode());
+  //console.log("response", response.getResponseCode());
 
   return response;
 }
 
 /**
- * Parses response string into an object. Also standardizes the object structure
- * for single vs multiple packages.
+ * Parses response string into an object.
  *
  * @param {Object} request Data request parameters.
  * @param {string} responseString Response from the API.
- * @return {Object} Contains package names as keys and associated download count
- *     information(object) as values.
+ * @return {Object} just parses the response
  */
 function normalizeResponse(request, responseString) {
-  console.log("normalizeResponse");
+  //console.log("normalizeResponse");
   var response = JSON.parse(responseString);
+  // { status: 'success',message: 'Campaigns found',data: { campaigns: [ [Object] ] } }
   return response;
 }
 
@@ -236,23 +235,17 @@ function normalizeResponse(request, responseString) {
  * Formats the parsed response from external data source into correct tabular
  * format and returns only the requestedFields
  *
- * @param {Object} parsedResponse The response string from external data source
+ * @param {Object} response The response string from external data source
  *     parsed into an object in a standard format.
  * @param {Array} requestedFields The fields requested in the getData request.
  * @returns {Array} Array containing rows of data in key-value pairs for each
  *     field.
  */
 function getFormattedData(response, requestedFields) {
-  console.log("getFormattedData");
-  console.log("Object.keys(response) ",Object.keys(response));
-  
+  //console.log("getFormattedData");
   var campaignsArray = response.data.campaigns;
-  console.log("campaignsArray",campaignsArray);
-
   var data = [];
-
   var formattedData = campaignsArray.map(function(campaign) {
-    console.log("campaign inside map ", campaign);
     return formatData(requestedFields, campaign);
   });
   data = data.concat(formattedData);
@@ -263,12 +256,12 @@ function getFormattedData(response, requestedFields) {
  * Formats a single row of data into the required format.
  *
  * @param {Object} requestedFields Fields requested in the getData request.
- * @param {Object} campaign 
+ * @param {Object} campaign The campaign data
  * @returns {Object} Contains values for requested fields in predefined format.
  */
 function formatData(requestedFields, campaign) {
   var row = requestedFields.asArray().map(function(requestedField) {
-    console.log("inside formatData map ", requestedField.getId());
+    //console.log("inside formatData map ", requestedField.getId());
     switch (requestedField.getId()) {
       case 'id':
         return campaign.id;
@@ -287,8 +280,8 @@ function formatData(requestedFields, campaign) {
       case 'total_replied':
         return campaign.stats.total_replied;
       case 'created_at':
-      //  created_at: '2022-05-16T17:30:38.149Z',
-      // field YYYYMMDD such as 20170317
+        //  created_at: '2022-05-16T17:30:38.149Z',
+        // field YYYYMMDD such as 20170317
         var parseDate = campaign.created_at.split("T")[0];
         var yearmonthday = parseDate.replaceAll("-","");
         return yearmonthday;
@@ -296,12 +289,6 @@ function formatData(requestedFields, campaign) {
         return '';
     }
   });
-  console.log("outside formatData map after switch : ", row);
+  //console.log("outside formatData map after switch : ", row);
   return {values: row};
 }
-
-
-
-    
-
-
